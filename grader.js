@@ -24,13 +24,9 @@ References:
 var fs = require('fs');
 var program = require('commander');
 var cheerio = require('cheerio');
-var HTMLFILE_DEFAULT = "index.html";
-var CHECKSFILE_DEFAULT = "checks.json";
-
-//URL SUPPORT
-
-var URL_DEFAULT = "";
 var rest = require('restler');
+var HTMLFILE_DEFAULT = "http://tranquil-shelf-7474.herokuapp.com/";
+var CHECKSFILE_DEFAULT = "checks.json";
 
 var assertFileExists = function(infile) {
     var instr = infile.toString();
@@ -41,56 +37,34 @@ var assertFileExists = function(infile) {
     return instr;
 };
 
-var assertURLValid = function(infile) {
-    var instr = infile.toString();
-    return instr;
-};
 
 var loadChecks = function(checksfile) {
     return JSON.parse(fs.readFileSync(checksfile));
 };
 
-var cheerioProcess = function(checksfile, htmldata) {
-    $ = cheerio.load(htmldata);
-    var checks = loadChecks(checksfile).sort();
-    var out = {};
-    for(var ii in checks) {
-        var present = $(checks[ii]).length > 0;
-        out[checks[ii]] = present;
-    }
-    return (out);
+var checkHtmlFile = function(htmlfile, checksfile) {
+    //rest.get('http://google.com').on('complete', function(result) {
+    rest.get(htmlfile+'').on('complete', function(result) {
+      if (result instanceof Error) {
+        console.log('Error: ' + result.message);
+        this.retry(5000); // try again after 5 sec
+      } else {
+        //read the html
+        var $ = cheerio.load(result);
+
+        var checks = loadChecks(checksfile).sort();
+        var out = {};
+        for(var ii in checks) {
+            var present = $(checks[ii]).length > 0;
+            out[checks[ii]] = present;
+        }
+
+        //response to JSON
+        var outJson = JSON.stringify(out, null, 4);
+        console.log(outJson);
+      }
+    });
 };
-
-var printtoconsole = function(out) {
-    var outJson = JSON.stringify(out, null, 4);
-    console.log(outJson);
-};
-
-var checkHtml = function(htmlfile, checksfile, htmlurl) {
-  if(htmlurl=="") fs.readFile(htmlfile, "utf8", function(error, data) {
-    if (!(error)) {
-      var out = cheerioProcess(checksfile, data);
-      if (require.main==module) printtoconsole (out);
-      return(out);
-    }
-    else {
-      console.log ('HTML input file reading error');
-      process.exit(1);
-    }
-  })
-  else rest.get(htmlurl).on('complete', function(result) {
-         if (result instanceof Error) {
-           console.log('URL reading error: ' + result.message);
-           process.exit(1);}
-         else {
-           var out = cheerioProcess(checksfile, result);
-           if(require.main==module) printtoconsole(out);
-           return(out);
-         }
-       });
-};
-
-
 
 var clone = function(fn) {
     // Workaround for commander.js issue.
@@ -99,15 +73,13 @@ var clone = function(fn) {
 };
 
 if(require.main == module) {
-program
-    .option('-c, --checks <check_file>', 'Path to checks.json', clone(assertFileExists), CHECKSFILE_DEFAULT)
-    .option('-f, --file <html_file>', 'Path to index.html', clone(assertFileExists), HTMLFILE_DEFAULT)
-    .option('-u, --url <url_link>', 'URL to index.html', clone(assertURLValid), URL_DEFAULT)
-    .parse(process.argv);
-    checkHtml(program.file, program.checks, program.url);
+    //parse the arguments in a cool way 
+    program
+        .option('-c, --checks <check_file>', 'Path to checks.json', CHECKSFILE_DEFAULT)
+        .option('-u, --url <url_file>', 'Path to json.json', HTMLFILE_DEFAULT)
+        .parse(process.argv);
+
+    checkHtmlFile(program.url, program.checks);
 } else {
-    exports.checkHtml = checkHtml;
+    exports.checkHtmlFile = checkHtmlFile;
 }
-
-
-
